@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>조커뽑기</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Gowun+Dodum&display=swap">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{
+  --felt:#3b1824; --felt2:#4c2130; --ink:#f3ead8; --mute:#c9a9a9;
+  --card:#f7f1e3; --cardInk:#22181b; --red:#b8322a; --gold:#e2b04f; --back:#2a3b5c; --back2:#33486e;
+  --display:"Do Hyeon","Apple SD Gothic Neo",sans-serif;
+  --body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 30%,var(--felt2),var(--felt) 70%) fixed;background-color:var(--felt);color:var(--ink);font-family:var(--body);font-size:15px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-weight:400;font-size:2.6rem;margin:0}
+h1 span,.gold{color:var(--gold)}
+h2{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0}
+.sub{color:var(--mute);margin:0;line-height:1.6}
+.label{font-size:.8rem;letter-spacing:.08em;color:var(--mute)}
+.panel{background:rgba(0,0,0,.22);border:1px solid rgba(226,176,79,.25);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+input{font:inherit;font-size:1rem;padding:10px 12px;border-radius:8px;border:1px solid rgba(243,234,216,.25);background:rgba(0,0,0,.25);color:var(--ink);min-width:0}
+.code{font-family:var(--display);font-size:1.4rem;letter-spacing:.2em;text-transform:uppercase;width:7em}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font-family:var(--display);font-size:1.15rem;border:0;border-radius:10px;padding:12px 20px;cursor:pointer;background:var(--gold);color:#2a1a10}
+button.ghost{background:transparent;color:var(--ink);border:1px solid rgba(243,234,216,.35);font-size:1rem;padding:8px 14px}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,.card:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.roomtag{font-family:var(--display);letter-spacing:.15em;color:var(--gold)}
+.seats{display:flex;flex-wrap:wrap;gap:8px}
+.seat{padding:6px 12px;border-radius:999px;background:rgba(0,0,0,.25);font-size:.9rem;font-variant-numeric:tabular-nums}
+.seat.cur{background:var(--gold);color:#2a1a10}
+.seat.tgt{outline:2px dashed var(--gold)}
+.seat.out{opacity:.5;text-decoration:line-through}
+.seat.off{opacity:.45;font-style:italic}
+.seat.me{font-weight:700}
+.hand{display:flex;flex-wrap:wrap;gap:6px}
+.card{width:52px;height:74px;border-radius:7px;background:var(--card);color:var(--cardInk);display:flex;flex-direction:column;justify-content:space-between;padding:5px 6px;font-family:Georgia,serif;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,.35);user-select:none}
+.card .r{font-size:1.15rem;line-height:1}
+.card .s{font-size:1.3rem;align-self:flex-end;line-height:1}
+.card.red{color:var(--red)}
+.card.jk{background:linear-gradient(135deg,var(--card),#f0d9a3);color:#6b2a6b;align-items:center;justify-content:center;font-family:var(--display);font-weight:400;font-size:1rem}
+.card.jk b{font-size:1.6rem;font-weight:400}
+.card.back{background:repeating-linear-gradient(45deg,var(--back) 0 6px,var(--back2) 6px 12px);border:3px solid var(--card)}
+.card.pick{cursor:pointer;transition:transform .15s}
+.card.pick:hover{transform:translateY(-6px)}
+.card.new{outline:3px solid var(--gold)}
+.msg{font-family:var(--display);font-size:1.35rem;color:var(--gold);min-height:1.5em}
+.log{margin:0;padding-left:1.1em;color:var(--mute);line-height:1.7;font-size:.9rem}
+.center{text-align:center;align-items:center}
+.bigcode{font-family:var(--display);font-size:3.2rem;letter-spacing:.25em;color:var(--gold)}
+ol.rank{margin:0;padding-left:1.4em;line-height:1.9;font-size:1.05rem}
+.err{color:#ffb3a8}
+@media (prefers-reduced-motion:reduce){.card.pick{transition:none}}
+@media (max-width:420px){.card{width:44px;height:64px}.card .r{font-size:1rem}h1{font-size:2.1rem}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+/* ===== 공통 ===== */
+const PREFIX="jokerdraw-pp-";            // PeerJS 공용 서버에서 방 ID 접두어
+const SUITS=["♠","♥","♦","♣"],RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const RV=Object.fromEntries(RANKS.map((r,i)=>[r,i]));
+const app=document.getElementById("app");
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const rk=c=>c==="JK"?"JK":c.slice(0,-1), st=c=>c==="JK"?"":c.slice(-1);
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const myKey=ls.get("jk-key")||(()=>{const k=Math.random().toString(36).slice(2,12);ls.set("jk-key",k);return k})();
+
+let nick=ls.get("jk-nick")||"",codeIn=(location.hash.slice(1)||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+let phase="entry",err="",code="",isHost=false,peer=null,conn=null,view=null,busy=false,connTimer=null;
+
+function randCode(){const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let s="";for(let i=0;i<4;i++)s+=A[Math.random()*A.length|0];return s}
+function fail(msg){err=msg;phase="entry";try{peer&&peer.destroy()}catch(e){}peer=null;conn=null;view=null;isHost=false;render()}
+
+/* ===== 방장(호스트): 게임 상태를 들고 각자에게 자기 패만 보냄 ===== */
+let P={};      // key -> {nick,conn,online,t}
+let G={status:"lobby"};
+let priv={};   // key -> {msg,newCard}
+
+function hostCreate(tries=0){
+  nick=nick.trim();if(!nick)return fail("닉네임을 입력하세요");
+  ls.set("jk-nick",nick);err="";phase="connecting";render();
+  code=randCode();
+  peer=new Peer(PREFIX+code);
+  peer.on("open",()=>{
+    isHost=true;P={[myKey]:{nick,conn:null,online:true,t:Date.now()}};G={status:"lobby"};priv={};
+    try{history.replaceState(null,"","#"+code)}catch(e){}
+    phase="room";push();
+  });
+  peer.on("connection",c=>{
+    c.on("data",d=>hostMsg(c,d));
+    c.on("close",()=>hostDrop(c));
+    c.on("error",()=>hostDrop(c));
+  });
+  peer.on("error",e=>{
+    if(e.type==="unavailable-id"&&tries<5){try{peer.destroy()}catch(_){}hostCreate(tries+1);return}
+    if(phase!=="room")fail("서버에 연결하지 못했어요. 잠시 후 다시 시도하세요");
+  });
+  peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
+}
+function hostMsg(c,d){
+  if(!d||typeof d!=="object")return;
+  if(d.t==="join"){
+    const key=String(d.key||"").slice(0,20),name=String(d.nick||"").trim().slice(0,10)||"손님";
+    if(!key)return;
+    if(P[key]){P[key].conn=c;P[key].online=true;if(G.status==="lobby")P[key].nick=name;addLog(`${P[key].nick} 다시 접속`)}
+    else{
+      if(Object.keys(P).length>=8&&G.status==="lobby"){c.send({t:"full"});return}
+      P[key]={nick:name,conn:c,online:true,t:Date.now()};
+      if(G.status!=="lobby")addLog(`${name} 관전 입장`);
+    }
+    c.key=key;push();
+  }else if(d.t==="draw"&&c.key){doDraw(c.key,d.i|0)}
+}
+function hostDrop(c){
+  const k=c.key;if(!k||!P[k]||P[k].conn!==c)return;
+  P[k].online=false;P[k].conn=null;
+  if(G.status!=="playing"||!G.order.includes(k)){delete P[k]}else addLog(`${P[k].nick} 연결 끊김 (같은 기기로 다시 들어오면 이어서 해요)`);
+  push();
+}
+function addLog(line){if(G.log)G.log=[line,...G.log].slice(0,8)}
+const nm=id=>P[id]?.nick||(G.names||{})[id]||"?";
+function nextActive(id){const o=G.order,n=o.length,i=o.indexOf(id);for(let k=1;k<=n;k++){const j=o[(i+k)%n];if(!G.out.includes(j))return j}return id}
+function removePairs(hand){
+  const by={};hand.forEach(c=>(by[rk(c)]=by[rk(c)]||[]).push(c));
+  const keep=[];for(const r in by){const g=by[r];if(r==="JK")keep.push(...g);else if(g.length%2)keep.push(g[0])}
+  return keep;
+}
+function startGame(){
+  const ps=Object.entries(P).filter(([,p])=>p.online).sort((a,b)=>a[1].t-b[1].t).slice(0,8).map(([k])=>k);
+  if(ps.length<2)return;
+  const deck=[];SUITS.forEach(s=>RANKS.forEach(r=>deck.push(r+s)));deck.push("JK");shuffle(deck);
+  const hands={},names={};ps.forEach(k=>{hands[k]=[];names[k]=P[k].nick});
+  deck.forEach((c,i)=>hands[ps[i%ps.length]].push(c));
+  const order=shuffle(ps.slice()),out=[];
+  order.forEach(k=>{hands[k]=shuffle(removePairs(hands[k]));if(!hands[k].length)out.push(k)});
+  const act=order.filter(k=>!out.includes(k));
+  G={status:act.length<=1?"end":"playing",order,names,hands,out,cur:act[0],loser:act.length===1?act[0]:null,log:["카드를 나누고 각자 짝을 버렸어요"]};
+  priv={};
+  // 대기실에서 나간 사람 정리
+  Object.keys(P).forEach(k=>{if(!P[k].online&&!order.includes(k))delete P[k]});
+  push();
+}
+function doDraw(k,i){
+  if(G.status!=="playing"||G.cur!==k)return;
+  const t=nextActive(k),me=G.hands[k],th=G.hands[t];
+  if(i<0||i>=th.length)return;
+  const c=th.splice(i,1)[0];
+  const m=c==="JK"?-1:me.findIndex(x=>rk(x)===rk(c));
+  const lines=[];
+  if(m>=0){const p=me.splice(m,1)[0];priv[k]={msg:`짝! ${p}, ${c} 버림`,newCard:null};lines.push(`${nm(k)} → ${nm(t)}에게서 뽑아 ${rk(c)} 짝 버림`)}
+  else{me.push(c);priv[k]={msg:c==="JK"?"으악… 조커를 뽑았다 🃏":`${c} 가져옴, 짝 없음`,newCard:c};lines.push(`${nm(k)} → ${nm(t)}에게서 한 장 뽑음`)}
+  priv[t]={msg:c==="JK"?"조커를 넘겼다! 😏":`${nm(k)}이(가) ${c}를 가져갔어요`,newCard:null};
+  shuffle(me);shuffle(th);
+  [t,k].forEach(id=>{if(!G.hands[id].length&&!G.out.includes(id)){G.out.push(id);lines.push(`${nm(id)} 탈출! 🎉`)}});
+  const act=G.order.filter(id=>!G.out.includes(id));
+  if(act.length<=1){G.status="end";G.loser=act[0]||null}else G.cur=nextActive(k);
+  lines.reverse().forEach(addLog);
+  push();
+}
+function viewFor(k){
+  const lobby=Object.entries(P).sort((a,b)=>a[1].t-b[1].t).map(([id,p])=>({name:p.nick,me:id===k,host:id===myKey,online:p.online}));
+  const v={status:G.status,code,isHost:k===myKey,lobby};
+  if(G.status==="lobby")return v;
+  const tgt=G.status==="playing"?nextActive(G.cur):null;
+  v.seats=G.order.map(id=>({name:nm(id),count:G.hands[id].length,out:G.out.includes(id),online:!!P[id]?.online,me:id===k,cur:id===G.cur&&G.status==="playing",tgt:id===tgt}));
+  v.inGame=G.order.includes(k);v.myTurn=G.cur===k&&G.status==="playing";v.iAmTarget=tgt===k;
+  v.curName=nm(G.cur);v.tgtName=tgt?nm(tgt):"";v.tgtCount=v.myTurn?G.hands[tgt].length:0;
+  v.hand=v.inGame?G.hands[k].slice():[];v.out=G.out.includes(k);
+  v.log=G.log;v.priv=priv[k]||null;
+  v.finish=G.out.map(id=>({name:nm(id),me:id===k}));v.loser=G.loser?nm(G.loser):"";
+  v.onlineCount=Object.values(P).filter(p=>p.online).length;
+  return v;
+}
+function push(){
+  for(const [k,p] of Object.entries(P)){if(k!==myKey&&p.conn&&p.online){try{p.conn.send({t:"view",v:viewFor(k)})}catch(e){}}}
+  view=viewFor(myKey);render();
+}
+
+/* ===== 참가자(클라이언트) ===== */
+function clientJoin(c0){
+  nick=nick.trim();const c=(c0||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(!nick)return fail("닉네임을 입력하세요");
+  if(c.length<3)return fail("방 코드를 입력하세요");
+  ls.set("jk-nick",nick);err="";phase="connecting";code=c;render();
+  peer=new Peer();
+  peer.on("open",()=>{
+    conn=peer.connect(PREFIX+c,{reliable:true});
+    conn.on("open",()=>{conn.send({t:"join",key:myKey,nick})});
+    conn.on("data",d=>{
+      if(d?.t==="view"){clearTimeout(connTimer);view=d.v;busy=false;phase="room";try{history.replaceState(null,"","#"+c)}catch(e){}render()}
+      else if(d?.t==="full")fail("방이 꽉 찼어요 (최대 8명)");
+    });
+    conn.on("close",()=>{if(phase==="room")fail("방장과 연결이 끊겼어요. 방장이 나갔거나 인터넷이 끊겼을 수 있어요")});
+  });
+  peer.on("error",e=>{
+    if(e.type==="peer-unavailable")fail("그 코드의 방이 없어요. 코드를 확인하세요");
+    else if(phase!=="room")fail("연결하지 못했어요. 잠시 후 다시 시도하세요");
+  });
+  clearTimeout(connTimer);connTimer=setTimeout(()=>{if(phase==="connecting")fail("연결 시간이 초과됐어요. 다시 시도하세요")},12000);
+}
+
+/* ===== 행동 ===== */
+function act(type,arg){
+  if(type==="start"){if(isHost)startGame()}
+  else if(type==="draw"){
+    if(busy||!view?.myTurn)return;
+    if(isHost)doDraw(myKey,arg);else{busy=true;conn.send({t:"draw",i:arg});render()}
+  }
+}
+function leave(){try{peer&&peer.destroy()}catch(e){}peer=null;conn=null;view=null;isHost=false;phase="entry";err="";try{history.replaceState(null,"",location.pathname)}catch(e){}render()}
+
+/* ===== 화면 ===== */
+function cardHTML(c,cls=""){
+  if(c==="JK")return `<div class="card jk ${cls}"><b>🃏</b>JOKER</div>`;
+  const red=st(c)==="♥"||st(c)==="♦";
+  return `<div class="card ${red?"red":""} ${cls}"><span class="r">${rk(c)}</span><span class="s">${st(c)}</span></div>`;
+}
+const sortHand=h=>h.slice().sort((a,b)=>(a==="JK")-(b==="JK")||RV[rk(a)]-RV[rk(b)]||a.localeCompare(b));
+const topbar=()=>`<div class="top"><h2>조커<span class="gold">뽑기</span></h2><div class="row"><span class="roomtag">방 ${esc(code)}</span><button class="ghost" id="leave">나가기</button></div></div>`;
+const inviteLink=()=>location.origin+location.pathname+"#"+code;
+
+function render(){
+  const ae=document.activeElement?.id;
+  if(phase==="entry"||phase==="connecting"){
+    const con=phase==="connecting";
+    app.innerHTML=`<h1>조커<span>뽑기</span></h1>
+      <p class="sub">각자 자기 폰으로 들어와서 하는 온라인 도둑잡기. 방장이 방을 만들고 코드를 알려 주면 친구들이 그 코드로 들어와요. 왼쪽 사람 카드 한 장을 뽑아 짝이 맞으면 버리고, 패를 다 털면 탈출. 마지막까지 조커를 쥔 사람이 집니다.</p>
+      <div class="panel">
+        <label class="label" for="nick">닉네임</label>
+        <input id="nick" maxlength="10" value="${esc(nick)}" placeholder="예: 민준" ${con?"disabled":""}>
+        <label class="label" for="code">방 코드로 입장</label>
+        <div class="row"><input id="code" class="code" maxlength="6" value="${esc(codeIn)}" placeholder="ABCD" ${con?"disabled":""}><button id="join" ${con?"disabled":""}>입장</button></div>
+        <div class="row"><span class="sub">또는</span><button class="ghost" id="make" ${con?"disabled":""}>새 방 만들기 (내가 방장)</button></div>
+        ${con?`<p class="sub">연결하는 중…</p>`:""}
+        ${err?`<p class="sub err">${esc(err)}</p>`:""}
+      </div>`;
+    const n=document.getElementById("nick"),c=document.getElementById("code");
+    n.oninput=e=>nick=e.target.value;c.oninput=e=>codeIn=e.target.value;
+    c.onkeydown=e=>{if(e.key==="Enter")clientJoin(codeIn)};
+    document.getElementById("join").onclick=()=>clientJoin(codeIn);
+    document.getElementById("make").onclick=()=>hostCreate();
+    if(ae)document.getElementById(ae)?.focus();
+    return;
+  }
+  const v=view;if(!v)return;
+  if(v.status==="lobby"){
+    const on=v.lobby.filter(p=>p.online).length;
+    app.innerHTML=`${topbar()}
+      <div class="panel center" style="padding:24px 16px">
+        <div class="label">친구들에게 이 코드나 링크를 보내 주세요</div>
+        <div class="bigcode">${esc(code)}</div>
+        <div class="row" style="justify-content:center"><button class="ghost" id="copy">초대 링크 복사</button></div>
+      </div>
+      <div class="panel">
+        <div class="label">모인 사람 · ${on}명</div>
+        <div class="seats">${v.lobby.map(p=>`<div class="seat ${p.me?"me":""} ${p.online?"":"off"}">${esc(p.name)}${p.host?" 👑":""}${p.me?" (나)":""}</div>`).join("")}</div>
+      </div>
+      ${v.isHost?`<div class="row"><button id="start" ${on<2?"disabled":""}>게임 시작</button><span class="sub">${on<2?"2명 이상 모여야 해요":"최대 8명"}</span></div>
+        <p class="sub" style="font-size:.85rem">방장이 이 창을 닫거나 화면을 오래 끄면 방이 사라져요.</p>`
+        :`<p class="sub">방장이 시작하길 기다리는 중…</p>`}`;
+    bindCommon();
+    document.getElementById("start")&&(document.getElementById("start").onclick=()=>act("start"));
+    return;
+  }
+  if(v.status==="end"){
+    app.innerHTML=`${topbar()}
+      <div class="panel center" style="padding:28px 16px">
+        <div class="label">게임 끝</div>
+        <div class="card jk" style="width:72px;height:100px"><b>🃏</b>JOKER</div>
+        <h2>${esc(v.loser)} 당첨!</h2>
+        <p class="sub">마지막까지 조커를 쥐고 있었어요.</p>
+      </div>
+      <div class="panel"><div class="label">탈출 순서</div><ol class="rank">${v.finish.map(p=>`<li>${esc(p.name)}${p.me?" (나)":""}</li>`).join("")}</ol></div>
+      ${v.isHost?`<div class="row"><button id="again" ${v.onlineCount<2?"disabled":""}>한 판 더 (접속 중인 ${v.onlineCount}명)</button></div>`:`<p class="sub">방장이 다음 판을 시작할 수 있어요.</p>`}`;
+    bindCommon();
+    document.getElementById("again")&&(document.getElementById("again").onclick=()=>act("start"));
+    return;
+  }
+  let status;
+  if(!v.inGame)status="관전 중이에요. 다음 판부터 참가할 수 있어요.";
+  else if(v.myTurn)status=busy?"뽑는 중…":`내 차례! ${v.tgtName}의 카드 한 장을 고르세요`;
+  else if(v.iAmTarget)status=`${v.curName}이(가) 내 카드를 고르는 중…`;
+  else status=`${v.curName}이(가) ${v.tgtName}의 카드를 고르는 중…`;
+  const pv=v.priv;
+  app.innerHTML=`${topbar()}
+    <div class="seats">${v.seats.map(s=>`<div class="seat ${s.cur?"cur":""} ${s.tgt?"tgt":""} ${s.out?"out":""} ${s.me?"me":""} ${s.online?"":"off"}">${esc(s.name)}${s.me?" (나)":""} · ${s.count}장${s.online?"":" · 끊김"}</div>`).join("")}</div>
+    <div class="msg">${esc(status)}</div>
+    ${v.myTurn?`<div class="panel"><div class="label">${esc(v.tgtName)}의 카드</div>
+      <div class="hand">${Array.from({length:v.tgtCount},(_,i)=>`<div class="card back pick" tabindex="0" role="button" aria-label="${i+1}번째 카드 뽑기" data-i="${i}"></div>`).join("")}</div></div>`:""}
+    ${v.inGame?`<div class="panel">
+      <div class="label">내 패 · ${v.hand.length}장</div>
+      ${pv?.msg?`<div style="font-family:var(--display);font-size:1.1rem;color:var(--gold)">${esc(pv.msg)}</div>`:""}
+      <div class="hand">${v.out?`<span class="sub">패를 다 털었어요. 탈출 성공 🎉 구경하며 기다려요.</span>`:sortHand(v.hand).map(c=>cardHTML(c,c===pv?.newCard?"new":"")).join("")}</div>
+    </div>`:""}
+    <div class="panel"><div class="label">진행 기록</div><ul class="log">${(v.log||[]).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>`;
+  bindCommon();
+  app.querySelectorAll(".card.pick").forEach(el=>{
+    const go=()=>act("draw",+el.dataset.i);el.onclick=go;
+    el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}}});
+}
+function bindCommon(){
+  document.getElementById("leave").onclick=leave;
+  const cp=document.getElementById("copy");
+  if(cp)cp.onclick=async()=>{
+    try{await navigator.clipboard.writeText(inviteLink());cp.textContent="복사했어요"}
+    catch(e){prompt("이 링크를 복사하세요",inviteLink())}
+    setTimeout(()=>{cp.textContent="초대 링크 복사"},1500);
+  };
+}
+window.addEventListener("beforeunload",e=>{if(isHost&&view&&view.status!=="lobby"){e.preventDefault();e.returnValue=""}});
+render();
+</script>
+</body>
+</html>
